@@ -3,6 +3,8 @@
 > **See what changed in the sound.**
 > A spectral microscope for audio.
 
+🌐 **Live Interactive Workbench v2.0.0**: [https://lorenhey.github.io/SpectralDiff/](https://lorenhey.github.io/SpectralDiff/)
+
 SpectralDiff is a professional desktop tool for musicians, audio engineers, and researchers to visualize, inspect, and quantitatively compare the spectral content of audio files.
 
 While standard spectrogram tools like Spek simply show you the spectrum, SpectralDiff lets you **investigate** it.

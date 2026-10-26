@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpectralDiff - Audio Spectral Microscope & Forensic Comparator v2.0.0</title>
+  <meta name="description" content="Professional spectral comparator, brickwall cutoff detector, and lossy transcode analyzer. Compare lossless masters vs MP3/AAC, detect fake upsampled hi-res audio.">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎛️</text></svg>">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🎛️</div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <h1>SpectralDiff</h1>
+          <span class="version-badge">v2.0.0</span>
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-dim);">A Spectral Microscope for Audio — See What Changed in the Sound</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <span>DSP Processing: <strong>STFT / dBFS Normalized</strong></span>
+      <span class="status-badge ok" id="system-status-badge">● Engine Online</span>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-tab="spectrograms">📊 Dual Spectrograms & Difference (A - B)</button>
+    <button class="nav-tab" data-tab="inspector">🔬 Real-time FFT Inspector & Slice</button>
+    <button class="nav-tab" data-tab="alignment">⏱️ Cross-Correlation Alignment</button>
+    <button class="nav-tab" data-tab="report">📋 Forensic Report & Export</button>
+  </nav>
+
+  <!-- Main Container -->
+  <main>
+
+    <!-- Verdict Banner -->
+    <section class="verdict-banner">
+      <div class="verdict-info">
+        <div class="verdict-title">
+          <span id="verdict-title-text">MP3 128 kbps Low-Pass Cutoff Detected</span>
+          <span class="status-badge danger" id="verdict-badge">● LOSSY COMPRESSION</span>
+        </div>
+        <p class="verdict-desc" id="verdict-desc-text">
+          Severe brickwall filter at 16.0 kHz. High-frequency content above 16 kHz has been completely eliminated by psychoacoustic quantization.
+        </p>
+      </div>
+
+      <div style="min-width: 280px;">
+        <label class="control-label" for="select-track-preset" style="font-size: 0.75rem;">Audio Forensic Scenario</label>
+        <select id="select-track-preset">
+          <option value="mp3_128k">MP3 128 kbps (Steep 16 kHz Brickwall Cutoff)</option>
+          <option value="fake_hires_upsample">Fake Hi-Res Audio (44.1 kHz CD audio upsampled into 96 kHz FLAC)</option>
+          <option value="analog_eq_shelf">Analog Master vs Remaster (+4 dB High-Shelf @ 10 kHz + 50Hz Hum)</option>
+          <option value="clipped_master">Brickwall Limiter Clipping (Harmonic Splatter / IMD)</option>
+          <option value="clean">Bit-Perfect Lossless Master (Full Nyquist Bandwidth)</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Metrics Row -->
+    <div class="metrics-row">
+      <div class="metric-tile">
+        <div class="label">Effective Bandwidth</div>
+        <div class="value" id="val-eff-bw">15.6<span class="unit">kHz</span></div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Brickwall Cutoff</div>
+        <div class="value" id="val-cutoff-freq" style="color: var(--danger);">15.6<span class="unit">kHz</span></div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Cutoff Persistence</div>
+        <div class="value" id="val-cutoff-pers">100%</div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">File Sample Rate</div>
+        <div class="value" id="val-sample-rate">48.0<span class="unit">kHz</span></div>
+      </div>
+    </div>
+
+    <!-- Tab 1: Spectrograms & Difference -->
+    <section class="tab-pane active" id="pane-spectrograms">
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <h2>📊 Reference Spectrogram (A) - Original Master / Lossless</h2>
+          <span class="card-subtitle">Viridis colormap normalized to dBFS (0 to -100 dBFS)</span>
+        </div>
+        <div class="spectrogram-container">
+          <canvas id="canvas-spec-a"></canvas>
+          <div class="spectrogram-tooltip">Move cursor over spectrogram to inspect FFT frame</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>📊 Target Spectrogram (B) - Investigated File</h2>
+            <span class="card-subtitle">Processed / Encoded / Remastered</span>
+          </div>
+          <div class="spectrogram-container">
+            <canvas id="canvas-spec-b"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>🔬 Difference Spectrogram (B - A)</h2>
+            <span class="card-subtitle">Cyan = Loss / Removal &nbsp;|&nbsp; Slate = 0 dB &nbsp;|&nbsp; Red = Boost / Distortion</span>
+          </div>
+          <div class="spectrogram-container">
+            <canvas id="canvas-spec-diff"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: FFT Inspector -->
+    <section class="tab-pane" id="pane-inspector">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2>🔬 Instantaneous FFT Spectrum Slice</h2>
+            <span class="card-subtitle">Active cursor time slice across all frequencies</span>
+          </div>
+          <div class="canvas-container">
+            <canvas id="canvas-inspector-fft"></canvas>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-dim); text-align: center;">Green = Reference (A) &nbsp;|&nbsp; Red = Target (B)</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>🎯 Inspector Crosshair Readout</h2>
+            <span class="card-subtitle">Point-in-time exact physical values</span>
+          </div>
+
+          <div class="metrics-row" style="margin-bottom: 1rem;">
+            <div class="metric-tile">
+              <div class="label">Frequency</div>
+              <div class="value" id="insp-freq" style="color: var(--accent-cyan);">15.60<span class="unit">kHz</span></div>
+            </div>
+            <div class="metric-tile">
+              <div class="label">Reference (A)</div>
+              <div class="value" id="insp-ref-db">-25.0<span class="unit">dBFS</span></div>
+            </div>
+            <div class="metric-tile">
+              <div class="label">Target (B)</div>
+              <div class="value" id="insp-tgt-db">-120.0<span class="unit">dBFS</span></div>
+            </div>
+            <div class="metric-tile">
+              <div class="label">Delta (B - A)</div>
+              <div class="value" id="insp-diff-db" style="color: var(--danger);">-95.0<span class="unit">dB</span></div>
+            </div>
+          </div>
+
+          <div class="callout" style="margin-bottom: 0;">
+            <strong>Forensic Interpretation:</strong> A Delta ($\Delta$) approaching $-\infty$ or $\le -60\text{ dB}$ at high frequencies confirms complete deletion of spectral information by lossy compression or band-limiting filters.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Alignment -->
+    <section class="tab-pane" id="pane-alignment">
+      <div class="card" style="max-width: 800px; margin: 0 auto;">
+        <div class="card-header">
+          <h2>⏱️ Cross-Correlation Temporal & Gain Alignment</h2>
+          <span class="card-subtitle">Sub-sample synchronization before spectral subtraction</span>
+        </div>
+
+        <div class="metrics-row" style="margin-top: 1rem;">
+          <div class="metric-tile">
+            <div class="label">Lag Offset</div>
+            <div class="value" id="val-align-lag">0 spl (0.00 ms)</div>
+          </div>
+          <div class="metric-tile">
+            <div class="label">Gain Difference</div>
+            <div class="value" id="val-align-gain">+0.00<span class="unit">dB</span></div>
+          </div>
+          <div class="metric-tile">
+            <div class="label">Signal Polarity</div>
+            <div class="value" id="val-align-pol" style="font-size: 1rem;">+ Normal</div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <strong>Mathematical Alignment:</strong> Before computing $\Delta P(f, t)$, target track $B$ is aligned via discrete cross-correlation:
+          $$R_{xy}(\tau) = \sum_{n} x[n] y[n + \tau]$$
+          The peak lag $\tau^*$ accounts for audio encoder padding delays (e.g. MP3 576-sample priming delay) and loudness normalization.
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: Report -->
+    <section class="tab-pane" id="pane-report">
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 Forensic Audio Investigation Report</h2>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-primary" id="btn-copy-report">Copy Report</button>
+            <button class="btn btn-sm" id="btn-export-md">Download .md</button>
+            <button class="btn btn-sm" id="btn-export-json">Download .json</button>
+          </div>
+        </div>
+        <textarea id="report-text-area" rows="18" readonly></textarea>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p><strong>SpectralDiff v2.0.0</strong> — Designed by <a href="https://github.com/lorenhey" target="_blank" rel="noopener">Loren (@lorenhey)</a>. Licensed under the MIT License.</p>
+    <p style="margin-top: 0.35rem; color: var(--text-dim); font-size: 0.75rem;">Quantitative audio spectrum microscope, STFT difference analyzer, and lossy transcode detector.</p>
+  </footer>
+
+  <script src="js/spectral-engine.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
